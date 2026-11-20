@@ -1,5 +1,10 @@
+
 pipeline {
     agent any
+
+    environment {
+        DOCKER_IMAGE = 'spoorthiht21/jenkins-docker-demo'
+    }
 
     stages {
 
@@ -11,7 +16,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t jenkins-docker-demo:v1 .'
+                sh 'docker build -t $DOCKER_IMAGE:$BUILD_NUMBER .'
             }
         }
 
@@ -21,16 +26,33 @@ pipeline {
             }
         }
 
-        stage('Run Docker Container') {
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push $DOCKER_IMAGE:$BUILD_NUMBER
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Container') {
             steps {
                 sh '''
                     docker rm -f jenkins-demo || true
                     docker run -d \
                     --name jenkins-demo \
                     -p 8081:80 \
-                    jenkins-docker-demo:v1
+                    $DOCKER_IMAGE:$BUILD_NUMBER
                 '''
             }
         }
     }
 }
+
